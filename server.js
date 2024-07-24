@@ -3,6 +3,7 @@ const uuid = require('uuid');
 const EventEmitter = require('events');
 const readline = require('readline');
 const winston = require('winston');
+const mysql = require('mysql2/promise');
 
 // Initialize logger
 const logger = winston.createLogger({
@@ -53,6 +54,7 @@ class GameServer extends EventEmitter {
         await new Promise((resolve) => {
             this.server.listen(this.port, () => {
                 logger.info(`Game server started on port ${this.port}`);
+				logger.info(`Successfully connected to MYSQL server.`);
                 resolve();
             });
         });
@@ -170,14 +172,12 @@ class GameServer extends EventEmitter {
     }
 
     handleAntiCheat(client, packet) {
-        // 
+        // Anti-cheat handling logic here
     }
-    
 
     handleCreateRoom(client, packet) {
         logger.info(`Username: ${client.user.username}, Create Room Name: ${packet.readString(34, 40)}`);
     }
-
 
     async sendLoginSuccess(client) {
         await this.sendLoginAck(client);
@@ -285,7 +285,7 @@ class GameServer extends EventEmitter {
         const packet = Buffer.alloc(31);
         packet.writeInt32LE(1399145256, 0);
         packet.writeInt16LE(client.sequenceNumber++, 4);
-        packet.writeInt16LE(20, 6);
+        packet.writeInt16LE(31, 6);
         packet.writeInt32LE(0, 8);
         packet.writeInt32LE(2162977, 12);
         packet.writeInt16LE(0, 16);
@@ -339,20 +339,31 @@ class GameClient {
 
 class GameDatabase {
     constructor() {
-        this.users = new Map();
-        this.users.set('serefsiz', { username: 'serefsiz', password: '123' });
-        this.users.set('test', { username: 'test', password: '123' });
+        this.init();
+    }
+
+    async init() {
+        this.connection = await mysql.createConnection({
+            host: 'localhost',
+            user: 'root',
+            password: '3FVIH@OSAqr/Bwsf',
+            database: 's2'
+        });
+
+        await this.connection.execute(`
+            CREATE TABLE IF NOT EXISTS users (
+                username VARCHAR(50) PRIMARY KEY,
+                password VARCHAR(50) NOT NULL
+            )
+        `);
     }
 
     async authenticateUser(username, password) {
-        return new Promise((resolve) => {
-            const user = this.users.get(username);
-            if (user && user.password === password) {
-                resolve(user);
-            } else {
-                resolve(null);
-            }
-        });
+        const [rows] = await this.connection.execute(
+            'SELECT * FROM users WHERE username = ? AND password = ?',
+            [username, password]
+        );
+        return rows.length > 0 ? rows[0] : null;
     }
 }
 
